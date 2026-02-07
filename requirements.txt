@@ -1,5 +1,5 @@
 google-generativeai
-feedparser
+beautifulsoup4
 requests
 tenacity
 python-dotenv
