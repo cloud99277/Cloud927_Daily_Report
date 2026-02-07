@@ -4,7 +4,7 @@ Automated AI intelligence report that aggregates 8 data sources and generates ac
 
 ## v2.0 - 从"日报"到"情报简报"
 
-**Cloud927 v2.0** 是一位 Hikvision 资深方案架构师，专注于供应链 AI 领域。输出从简单摘要升级为**可执行的情报简报**。
+**Cloud927 v2.0** 是一位资深方案架构师，专注于供应链 AI 领域。输出从简单摘要升级为**可执行的情报简报**。
 
 ## Features
 
