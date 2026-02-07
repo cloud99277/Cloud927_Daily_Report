@@ -322,3 +322,173 @@ V2EX fetcher 依赖 RSSHub，可能失败。经验：
 ---
 
 **经验**: 数据质量 × Prompt 工程 = 高质量输出
+
+---
+
+# Cloud927 v2.0 优化升级 (2026-02-08)
+
+## 新增3个高价值数据源
+
+### 1. AI News Fetcher (官方博客)
+| 来源 | URL | 类型 |
+|------|-----|------|
+| OpenAI | openai.com/blog/ | HTML |
+| Anthropic | anthropic.com/news | HTML |
+| Google DeepMind | deepmind.google/blog | HTML |
+| Meta AI | ai.meta.com/blog | HTML |
+
+**价值**: 获取第一手 AI 模型/产品发布信息
+
+### 2. Product Hunt Fetcher (AI新品雷达)
+- URL: producthunt.com/topics/ai
+- 类型: HTML
+- 价值: 发现最新的 AI 产品发布
+
+### 3. Reddit AI Fetcher (社区深度讨论)
+- 子版: r/LocalLLaMA, r/Artificial, r/MachineLearning
+- API: reddit.com/{subreddit}/top.json
+- 价值: 获取社区对 AI 技术的深度讨论
+
+## v2.0 排版优化
+
+### 设计理念
+- **Less is More**: 只选 5-8 条最有价值的信号
+- **表格优先**: 可扫描性 > 深度阅读
+- **结构化洞察**: 概览表格 + 深度分析 + 行动建议
+
+### v2.0 输出结构
+
+```markdown
+# 🤖 {date} AI Daily Briefing
+
+> **核心发现一句话** - 一句话概括最重要信号
+
+---
+
+### 📊 信号强度概览
+| 领域 | 热度 | 重要发现 |
+|------|------|----------|
+| AI模型 | 🔥🔥🔥 | xxx |
+| 开源工具 | 🔥🔥 | xxx |
+
+---
+
+## 🚨 Top Signal (必读)
+> **重要性**: ⭐⭐⭐⭐⭐ | **来源**: xxx
+
+**[标题](url)**
+- 关键洞察
+- 商业影响
+
+### Cloud927 深度解读
+1. **供应链自动化** 💎
+2. **个人AI Agent** 🤖
+3. **Web3财富机会** 🪙
+
+---
+
+## 🛠️ 工程实践 (表格)
+## 🔬 研究前沿 (表格)
+## 🆕 产品雷达 (表格)
+## 💬 社区声音
+## 🇨🇳 国内动态
+
+## 🎯 Cloud927 洞察
+> **趋势判断**: 100+ words
+
+> **行动建议**:
+> - [立即可做]
+> - [短期规划]
+> - [长期观察]
+```
+
+### v2.0 vs v1.0 对比
+
+| 维度 | v1.0 | v2.0 |
+|------|------|------|
+| 数据源 | 5个 | 8个 |
+| 输出格式 | 纯文本 | 表格+结构化 |
+| 信息密度 | 中 | 高 |
+| 可扫描性 | 低 | 高 |
+| 行动建议 | 无 | 3档建议 |
+
+## 技术实现
+
+### v2.0 主函数并行抓取
+```python
+with ThreadPoolExecutor(max_workers=8) as executor:
+    futures = {
+        "hn": executor.submit(fetch_hn_data),
+        "gh": executor.submit(fetch_github_data),
+        "hf": executor.submit(fetch_hf_data),
+        "ai_news": executor.submit(fetch_ai_news_data),
+        "ph": executor.submit(fetch_ph_data),
+        "reddit": executor.submit(fetch_reddit_data),
+        "v2ex": executor.submit(fetch_v2ex_data),
+        "hn_show": executor.submit(fetch_hn_show_data),
+    }
+```
+
+### v2.0 输出格式器
+```python
+def _format_item(self, item: dict, item_type: str) -> str:
+    """表格化格式化每个数据项"""
+    # 支持 8 种数据源类型格式化
+```
+
+## v2.0 关键改进
+
+### 1. 数据源扩展 (5→8)
+```
++ AI News (官方博客)
++ Product Hunt (新品雷达)
++ Reddit (社区讨论)
+```
+
+### 2. 排版优化
+```
+- 纯文本列表
++ 表格化概览
++ 信号强度可视化
++ 行动建议分层
+```
+
+### 3. 信息密度提升
+- 概览表格: 一眼看清所有信号
+- Top Signal: 深度三支柱分析
+- 行动建议: 可执行的下一步
+
+## 成本与效率
+
+| 指标 | v1.0 | v2.0 |
+|------|------|------|
+| 数据源 | 5 | 8 |
+| 执行时间 | ~60s | ~90s |
+| 输出长度 | ~1500字 | ~2000字 |
+| 信息密度 | 中 | 高 |
+
+## v2.0 经验总结
+
+### 1. 数据源选择原则
+- **官方第一手**: AI News > HN > Reddit
+- **深度讨论**: Reddit > HN > V2EX
+- **新品发现**: Product Hunt > Show HN
+
+### 2. 排版设计原则
+- **可扫描性**: 表格 > 列表 > 纯文本
+- **层次结构**: 概览 → 深度 → 行动
+- **视觉引导**: emoji + 符号 + 分隔线
+
+### 3. Prompt 优化
+- **明确格式**: 给出完整模板
+- **量化要求**: "5-8 items", "100+ words"
+- **行动导向**: 添加行动建议层
+
+### 4. Mock 数据策略
+- 每个 fetcher 必须有 mock fallback
+- mock 数据质量 = 演示效果
+- 定期更新 mock 数据
+
+---
+
+**v2.0 核心理念**: 从"信息搬运"到"情报简报"
