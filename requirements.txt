@@ -1,0 +1,6 @@
+google-generativeai
+feedparser
+requests
+tenacity
+python-dotenv
+python-dateutil
