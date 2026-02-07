@@ -81,6 +81,40 @@ parse() got an unexpected keyword argument 'timeout'
 ```
 **解决**: 使用 `requests` 手动获取后 parse
 
+### 8. RSS 依赖不稳定 → 改为 HTML 爬取
+**问题**: feedparser 依赖的 RSSHub 服务不稳定，经常返回 503 错误
+**解决**: 使用 `requests + BeautifulSoup` 直接爬取原始 HTML
+```python
+# 替换 feedparser
+response = requests.get(url, headers={"User-Agent": "..."})
+soup = BeautifulSoup(response.text, "html.parser")
+articles = soup.select("article.Box-row")  # CSS 选择器
+```
+**经验**:
+- RSS 服务是第三方封装，可能失效或限流
+- 直接爬取 HTML 更稳定，但需要维护选择器
+- 建议同时保留 mock 数据作为 fallback
+
+### 9. requirements.txt 同步
+**错误**: 修改代码后忘记更新依赖声明
+```
+# 旧
+feedparser
+# 新
+beautifulsoup4
+```
+**解决**: 每次修改依赖时同步更新 requirements.txt
+
+### 10. HN 24h 新鲜度过滤
+**需求**: 只获取最近 24 小时内的热门故事
+**实现**:
+```python
+def _is_recent(self, story_time: int, max_age_seconds: int = 86400) -> bool:
+    current_time = int(time.time())
+    return (current_time - story_time) <= max_age_seconds
+```
+**经验**: 数据过滤应该在 fetch 层完成，减少 LLM 处理噪音
+
 ## 架构经验
 
 ### 成功的模式
@@ -89,19 +123,22 @@ parse() got an unexpected keyword argument 'timeout'
 3. **重试机制**: tenacity 指数退避
 4. **环境隔离**: venv + dotenv
 
-### 待改进
-1. GitHub/HuggingFace RSS 网络不稳定
-2. 缺少 GitHub API 直接调用作为 fallback
+### 待改进 (已解决部分)
+1. ~~GitHub/HuggingFace RSS 网络不稳定~~ ✅ 已改为 HTML 爬取
+2. ~~缺少 GitHub API 直接调用作为 fallback~~ ✅ 已添加 mock 数据 fallback
 3. 日志轮转可优化
+4. 未来可能需要添加请求缓存避免重复爬取
+5. HTML 选择器可能需要随网站改版更新
 
 ## 依赖版本
 ```
 google-generativeai==0.8.6
-feedparser==6.0.12
+beautifulsoup4==4.12.3
 requests==2.32.5
 tenacity==9.1.4
 python-dotenv==1.2.1
 ```
+**注意**: `feedparser` 已移除，改为 `beautifulsoup4`
 
 ## 运行命令
 ```bash
@@ -110,3 +147,4 @@ python-dotenv==1.2.1
 
 ---
 生成时间: 2026-02-08
+更新时间: 2026-02-08 (修复 RSS → HTML 爬取)
