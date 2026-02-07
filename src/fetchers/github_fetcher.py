@@ -3,8 +3,9 @@
 import requests
 from bs4 import BeautifulSoup
 from typing import Any
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+# TODO: Implement caching (e.g., using diskcache or simple file-based cache)
+# to avoid repeated API calls for the same repos across runs.
 
 MOCK_DATA = [
     {
@@ -38,21 +39,17 @@ class GitHubFetcher:
         self.timeout = timeout
         self.base_url = "https://github.com/trending"
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((requests.RequestException,))
-    )
-    def fetch_trending(self, language: str = "python", limit: int = 5) -> list[dict[str, Any]]:
+    def fetch_trending(self, language: str = "python", limit: int = 5, fetch_readme: bool = False) -> list[dict[str, Any]]:
         """
         Fetch top trending GitHub repositories for a given language.
 
         Args:
             language: Programming language to filter by (default: python)
             limit: Maximum number of repositories to return (default: 5)
+            fetch_readme: Whether to fetch README content for each repo (default: False)
 
         Returns:
-            List of dictionaries containing repo name, description, stars, and url
+            List of dictionaries containing repo name, description, stars, url, and optional readme
         """
         try:
             url = f"{self.base_url}/{language}"
@@ -69,6 +66,15 @@ class GitHubFetcher:
             for article in articles:
                 repo_info = self._parse_article(article, language)
                 if repo_info:
+                    # Optionally fetch README content
+                    if fetch_readme:
+                        owner, repo = repo_info["name"].split("/") if "/" in repo_info["name"] else (None, None)
+                        if owner and repo:
+                            repo_info["readme"] = self.fetch_readme(owner, repo)
+                        else:
+                            repo_info["readme"] = ""
+                    else:
+                        repo_info["readme"] = ""
                     repositories.append(repo_info)
 
             if repositories:
@@ -137,10 +143,42 @@ class GitHubFetcher:
         except ValueError:
             return 0
 
-    def fetch_ai_trending(self, limit: int = 5) -> list[dict[str, Any]]:
+    def fetch_readme(self, owner: str, repo: str) -> str:
+        """
+        Fetch the raw README.md content from GitHub.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+
+        Returns:
+            First 1000 characters of the README content, or empty string on failure.
+        """
+        # Try main branch first, then master
+        for branch in ["main", "master"]:
+            try:
+                url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/README.md"
+                response = requests.get(url, timeout=self.timeout)
+                if response.status_code == 200:
+                    content = response.text
+                    # Return first 1000 characters
+                    return content[:1000] if content else ""
+            except requests.RequestException:
+                continue
+        # Fallback: try without explicit path (may work for some repos)
+        try:
+            url = f"https://raw.githubusercontent.com/{owner}/{repo}/main/README"
+            response = requests.get(url, timeout=self.timeout)
+            if response.status_code == 200:
+                return response.text[:1000]
+        except requests.RequestException:
+            pass
+        return ""
+
+    def fetch_ai_trending(self, limit: int = 5, fetch_readme: bool = False) -> list[dict[str, Any]]:
         """Fetch AI-related trending repositories."""
         # Fetch Python trending and filter for AI-related
-        repos = self.fetch_trending(language="python", limit=limit * 2)
+        repos = self.fetch_trending(language="python", limit=limit * 2, fetch_readme=fetch_readme)
 
         ai_keywords = ["ai", "machine-learning", "ml", "deep-learning", "neural",
                        "llm", "transformer", "gpt", "claude", "artificial", "pytorch",

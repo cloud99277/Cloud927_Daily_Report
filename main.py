@@ -14,6 +14,9 @@ from src.utils.logger import setup_logger
 from src.fetchers.hn_fetcher import HNFetcher
 from src.fetchers.github_fetcher import GitHubFetcher
 from src.fetchers.hf_fetcher import HuggingFaceFetcher
+from src.fetchers.hf_api_fetcher import HuggingFaceAPIFetcher
+from src.fetchers.v2ex_fetcher import V2EXFetcher
+from src.fetchers.hn_show_fetcher import HNShowFetcher
 from src.generator import LLMClient
 from src.storage import ObsidianWriter
 
@@ -62,42 +65,64 @@ def fetch_github_data() -> dict[str, Any]:
     """Fetch GitHub trending data.
 
     Returns:
-        Dictionary with GitHub data.
+        Dictionary with GitHub data including readme content for repos.
     """
     fetcher = GitHubFetcher()
-    trending = fetcher.fetch_trending(language="python", limit=5)
-    ai_trending = fetcher.fetch_ai_trending(limit=5)
+    trending = fetcher.fetch_trending(language="python", limit=5, fetch_readme=True)
+    ai_trending = fetcher.fetch_ai_trending(limit=5, fetch_readme=True)
     return {
         "trending": trending,
         "ai_trending": ai_trending,
     }
 
 
-def fetch_hf_data() -> dict[str, Any]:
-    """Fetch HuggingFace data.
+def fetch_hf_data() -> list[dict[str, Any]]:
+    """Fetch HuggingFace data using API.
 
     Returns:
-        Dictionary with HF data.
+        List of HF papers/models.
     """
-    fetcher = HuggingFaceFetcher()
+    fetcher = HuggingFaceAPIFetcher()
     return fetcher.fetch()
 
 
-def fetch_all_data_parallel() -> tuple[dict, dict, dict]:
+def fetch_v2ex_data() -> list[dict[str, Any]]:
+    """Fetch V2EX discussions.
+
+    Returns:
+        List of V2EX posts.
+    """
+    fetcher = V2EXFetcher()
+    return fetcher.fetch()
+
+
+def fetch_hn_show_data() -> dict[str, Any]:
+    """Fetch HN Show HN posts.
+
+    Returns:
+        Dictionary with Show HN posts.
+    """
+    fetcher = HNShowFetcher()
+    return fetcher.fetch()
+
+
+def fetch_all_data_parallel() -> tuple[dict, dict, dict, list, dict]:
     """Fetch all data sources in parallel.
 
     Returns:
-        Tuple of (hn_data, gh_data, hf_data).
+        Tuple of (hn_data, gh_data, hf_data, v2ex_data, hn_show_data).
     """
     from src.utils.logger import setup_logger
     logger = setup_logger("fetcher")
     logger.info("Starting parallel data fetch")
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {
             "hn": executor.submit(fetch_hn_data),
             "gh": executor.submit(fetch_github_data),
             "hf": executor.submit(fetch_hf_data),
+            "v2ex": executor.submit(fetch_v2ex_data),
+            "hn_show": executor.submit(fetch_hn_show_data),
         }
 
         results = {}
@@ -114,11 +139,17 @@ def fetch_all_data_parallel() -> tuple[dict, dict, dict]:
             except Exception as e:
                 logger.error(f"Failed to fetch data: {e}")
 
-    return results.get("hn", {}), results.get("gh", {}), results.get("hf", [])
+    return (
+        results.get("hn", {}),
+        results.get("gh", {}),
+        results.get("hf", []),
+        results.get("v2ex", []),
+        results.get("hn_show", {}),
+    )
 
 
 def generate_report(
-    hn_data: dict, gh_data: dict, hf_data: list, api_key: str
+    hn_data: dict, gh_data: dict, hf_data: list, v2ex_data: list, hn_show_data: dict, api_key: str
 ) -> str:
     """Generate the markdown report using LLM.
 
@@ -126,6 +157,8 @@ def generate_report(
         hn_data: Hacker News data.
         gh_data: GitHub data.
         hf_data: HuggingFace data.
+        v2ex_data: V2EX discussions.
+        hn_show_data: Show HN posts.
         api_key: Gemini API key.
 
     Returns:
@@ -144,6 +177,8 @@ def generate_report(
         hn_data=stories,
         gh_data=gh_repos,
         hf_data=hf_data,
+        showhn_data=hn_show_data.get("posts", []),
+        v2ex_data=v2ex_data,
     )
 
     return report
@@ -206,15 +241,17 @@ def main() -> int:
 
         # Fetch data in parallel
         logger.info("Fetching data from all sources...")
-        hn_data, gh_data, hf_data = fetch_all_data_parallel()
+        hn_data, gh_data, hf_data, v2ex_data, hn_show_data = fetch_all_data_parallel()
 
         logger.info(f"HN: {len(hn_data.get('stories', []))} stories, {len(hn_data.get('comments', []))} comments")
         logger.info(f"GitHub: {len(gh_data.get('trending', []))} trending, {len(gh_data.get('ai_trending', []))} AI")
         logger.info(f"HuggingFace: {len(hf_data)} papers")
+        logger.info(f"V2EX: {len(v2ex_data)} discussions")
+        logger.info(f"Show HN: {len(hn_show_data.get('posts', []))} posts")
 
         # Generate report
         logger.info("Generating daily report...")
-        report = generate_report(hn_data, gh_data, hf_data, api_key)
+        report = generate_report(hn_data, gh_data, hf_data, v2ex_data, hn_show_data, api_key)
 
         # Save report
         logger.info("Saving report to Obsidian vault...")

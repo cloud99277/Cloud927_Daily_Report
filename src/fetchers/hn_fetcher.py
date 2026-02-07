@@ -3,7 +3,9 @@
 import logging
 import requests
 import time
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from bs4 import BeautifulSoup
+
+# TODO: Implement caching for fetched external URLs to avoid redundant requests
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +66,18 @@ class HNFetcher:
                 continue
 
             if score >= 50:  # Lower threshold slightly to ensure enough fresh content
+                # Fetch excerpt for external URLs
+                url = story.get("url", "")
+                excerpt = self._fetch_first_paragraph(url) if url else ""
+
                 stories.append({
                     "title": story.get("title"),
-                    "url": story.get("url"),
+                    "url": url,
                     "score": score,
                     "by": story.get("by"),
                     "time": story_time,
-                    "time_ago": self._format_time_ago(story_time)
+                    "time_ago": self._format_time_ago(story_time),
+                    "excerpt": excerpt
                 })
 
         self.logger.info(f"Fetched {len(stories)} fresh stories (last 24h) from {checked} checked")
@@ -85,6 +92,49 @@ class HNFetcher:
             return f"{seconds // 3600} hours ago"
         else:
             return f"{seconds // 86400} days ago"
+
+    def _fetch_first_paragraph(self, url: str) -> str:
+        """
+        Fetch the first paragraph from an external URL.
+
+        Args:
+            url: External URL to fetch content from.
+
+        Returns:
+            First 500 characters of meaningful content, or empty string on failure.
+        """
+        # Skip HN internal URLs
+        if not url or "news.ycombinator.com" in url:
+            return ""
+
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            response = requests.get(url, timeout=10, headers=headers)
+            if response.status_code != 200:
+                return ""
+
+            # Try to parse as HTML
+            try:
+                soup = BeautifulSoup(response.text, "html.parser")
+
+                # Remove script and style elements
+                for tag in soup(["script", "style", "nav", "header", "footer"]):
+                    tag.decompose()
+
+                # Find first meaningful paragraph
+                for tag in soup.find_all(["p", "article"]):
+                    text = tag.get_text(strip=True)
+                    # Skip very short or navigation-like text
+                    if len(text) > 50:
+                        return text[:500]
+                return ""
+            except Exception:
+                # If not HTML or parsing fails, try plain text
+                return ""
+        except requests.RequestException:
+            return ""
 
     def get_top_comments(self, story_id: int | None = None, limit: int = 3) -> list[dict]:
         """Fetch top comments from a story or default story."""

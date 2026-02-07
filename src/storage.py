@@ -52,7 +52,10 @@ class ObsidianWriter:
         return f"{report_date.isoformat()}.md"
 
     def _get_filepath(self, report_date: date) -> Path:
-        """Get the full filepath for a report.
+        """Get the full filepath for a report with monthly subfolders.
+
+        Format: vault_path/{MM}_Daily_Reports/YYYY-MM/YYYY-MM-DD.md
+        Example: Obsidian/10_Daily_Reports/2026-02/2026-02-08.md
 
         Args:
             report_date: The date of the report.
@@ -60,7 +63,17 @@ class ObsidianWriter:
         Returns:
             The full path to the report file.
         """
-        return self.vault_path / self._get_filename(report_date)
+        month_folder = f"{report_date.month:02d}_Daily_Reports"
+        year_month_folder = report_date.strftime("%Y-%m")
+        filename = self._get_filename(report_date)
+
+        # Create full path with monthly subfolders
+        full_path = self.vault_path / month_folder / year_month_folder / filename
+
+        # Ensure parent directories exist
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+
+        return full_path
 
     def write_report(self, content: str, report_date: Optional[date] = None) -> Path:
         """Write a daily report to the Obsidian vault.
