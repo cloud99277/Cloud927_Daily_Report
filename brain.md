@@ -8,11 +8,6 @@
 ### 1. .env 配置格式错误
 **错误**: `.env` 第一行只有 API Key 值，缺少 `GEMINI_API_KEY=` 前缀
 ```
-# 错误
-AIzaSyDTv8g8L80yN-04xtow3zCLdFwcPmZQlkE
-# 正确
-GEMINI_API_KEY=AIzaSyDTv8g8L80yN-04xtow3zCLdFwcPmZQlkE
-```
 **解决**: 补全 key=value 格式
 
 ### 2. google-generativeai API 变更
