@@ -1,0 +1,409 @@
+# Cloud927 v3.0 Configuration
+# Global configuration for data sources, processing, and output
+
+# Application Settings
+app:
+  name: "Cloud927"
+  version: "3.0.0"
+  log_level: "INFO"
+
+# Data Source Groups for v3.0
+fetcher_groups:
+  ai_tech:
+    sources:
+      - hn
+      - github
+      - hf
+      - ai_news
+      - reddit
+      - ph
+      - v2ex
+      - hn_show
+      - twitter
+      - arxiv
+    fetch_parallel: true
+    max_workers: 10
+
+  global_news:
+    sources:
+      - reuters
+      - ap_news
+      - bbc_world
+    fetch_parallel: true
+    max_workers: 3
+    interval_hours: 1
+
+  china_tech:
+    sources:
+      - jinri_remai
+      - sina
+      - ifeng
+      - "36kr"
+      - "机器之心"
+    fetch_parallel: true
+    max_workers: 5
+    interval_hours: 2
+
+  china_society:
+    sources:
+      - pengpai
+      - xinjingbao
+      - caixin
+      - rmrb
+    fetch_parallel: true
+    max_workers: 4
+    interval_hours: 2
+
+# Individual Data Source Configurations
+sources:
+  # Existing v2.0 Sources
+  hn:
+    enabled: true
+    type: "api"
+    priority: "P0"
+    category: "ai_tech"
+    fetch_interval_minutes: 60
+    timeout_seconds: 30
+    retry_attempts: 3
+    filters:
+      freshness_hours: 24
+      min_score: 50
+
+  github:
+    enabled: true
+    type: "api"
+    priority: "P0"
+    category: "ai_tech"
+    fetch_interval_minutes: 240
+    timeout_seconds: 30
+    retry_attempts: 3
+    filters:
+      languages: ["python", "typescript"]
+      min_stars: 100
+
+  hf:
+    enabled: true
+    type: "api"
+    priority: "P1"
+    category: "ai_tech"
+    fetch_interval_minutes: 480
+    timeout_seconds: 30
+    retry_attempts: 3
+    filters:
+      papers_limit: 20
+
+  ai_news:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "ai_tech"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+    sources:
+      - "https://openai.com/news/rss.xml"
+      - "https://www.anthropic.com/rss.xml"
+      - "https://blog.google/rss.xml"
+      - "https://about.fb.com/news/rss/"
+
+  reddit:
+    enabled: true
+    type: "api"
+    priority: "P1"
+    category: "ai_tech"
+    fetch_interval_minutes: 180
+    timeout_seconds: 30
+    retry_attempts: 3
+    subreddits: ["MachineLearning", "artificial", "LocalLLaMA", "OpenAI"]
+    filters:
+      min_score: 10
+      max_age_hours: 24
+
+  ph:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "ai_tech"
+    fetch_interval_minutes: 360
+    timeout_seconds: 30
+    retry_attempts: 3
+    filters:
+      days_back: 7
+
+  v2ex:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "ai_tech"
+    fetch_interval_minutes: 180
+    timeout_seconds: 30
+    retry_attempts: 3
+    nodes: ["share", "ai"]
+
+  hn_show:
+    enabled: true
+    type: "api"
+    priority: "P2"
+    category: "ai_tech"
+    fetch_interval_minutes: 240
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  # New Global News Sources
+  reuters:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "global_news"
+    fetch_interval_minutes: 60
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://www.reutersagency.com/feed/?best-topics=world-news&LOC=19254"
+    filters:
+      freshness_hours: 24
+      categories: ["World News", "Politics", "Business"]
+
+  ap_news:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "global_news"
+    fetch_interval_minutes: 60
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://feeds.ap.org/feed/rss/AllStories"
+    filters:
+      freshness_hours: 24
+
+  bbc_world:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "global_news"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "http://feeds.bbci.co.uk/news/world/rss.xml"
+    filters:
+      freshness_hours: 24
+
+  # New China Tech Sources
+  jinri_remai:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "china_tech"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://rsshub.app/toutiao/rss/人工智能"
+    filters:
+      freshness_hours: 48
+
+  sina:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "china_tech"
+    fetch_interval_minutes: 180
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://rsshub.app/sina/focus"
+    filters:
+      freshness_hours: 24
+
+  ifeng:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "china_tech"
+    fetch_interval_minutes: 180
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://rsshub.app/ifeng/news"
+    filters:
+      freshness_hours: 24
+
+  36kr:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "china_tech"
+    fetch_interval_minutes: 180
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://rsshub.app/36kr/news"
+    filters:
+      freshness_hours: 48
+
+  机器之心:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "china_tech"
+    fetch_interval_minutes: 240
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://rsshub.app/jiqizhixin"
+    filters:
+      freshness_hours: 72
+
+  # New China Society Sources
+  pengpai:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "china_society"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://rsshub.app/thepaper"
+    filters:
+      freshness_hours: 24
+
+  xinjingbao:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "china_society"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://rsshub.app/bjnews"
+    filters:
+      freshness_hours: 24
+
+  caixin:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "china_society"
+    fetch_interval_minutes: 180
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://rsshub.app/caixin"
+    filters:
+      freshness_hours: 48
+
+  rmrb:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "china_society"
+    fetch_interval_minutes: 240
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://rsshub.app/people"
+    filters:
+      freshness_hours: 48
+
+  # Supplementary AI Sources
+  twitter:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "ai_tech"
+    fetch_interval_minutes: 60
+    timeout_seconds: 30
+    retry_attempts: 3
+    rss_url: "https://nitter.net/elonmusk/rss"
+    filters:
+      freshness_hours: 12
+
+  arxiv:
+    enabled: true
+    type: "api"
+    priority: "P1"
+    category: "ai_tech"
+    fetch_interval_minutes: 720
+    timeout_seconds: 60
+    retry_attempts: 3
+    filters:
+      categories: ["cs.AI", "cs.LG", "cs.CL"]
+      max_results: 50
+
+# Processing Configuration
+processing:
+  deduplication:
+    enabled: true
+    exact_match_threshold: 0.95
+    fuzzy_match_threshold: 0.80
+    priority_rules:
+      - "official_sources"
+      - "update_time"
+      - "title_match"
+
+  clustering:
+    enabled: true
+    method: "keyword"  # or "embedding"
+    max_cluster_size: 5
+    categories:
+      - "AI模型更新"
+      - "开源工具/框架"
+      - "研究论文/突破"
+      - "产品发布/融资"
+      - "行业动态/政策"
+      - "全球要闻"
+      - "中国社会"
+
+  timeline:
+    enabled: true
+    state_file: "data/timeline_state.json"
+    entities:
+      - "OpenAI"
+      - "Google"
+      - "Anthropic"
+      - "Meta"
+      - "字节跳动"
+      - "阿里巴巴"
+      - "百度"
+
+  temporal_filter:
+    enabled: true
+    rules:
+      news:
+        business_hours_window_hours: 2
+        off_hours_window_hours: 6
+        weekend_window_hours: 8
+      github:
+        window_hours: 24
+      paper:
+        window_hours: 168  # 7 days
+      social:
+        window_hours: 48
+
+# Output Configuration
+output:
+  format: "markdown"
+  max_articles_per_category: 10
+  include_timeline: true
+  include_clusters: true
+  obsidian:
+    enabled: true
+    vault_path: ""
+    folder: "Daily Report"
+
+# Source Priority Ranking (higher = more trusted)
+source_priority:
+  official:
+    - "openai.com"
+    - "anthropic.com"
+    - "google.com"
+    - "meta.com"
+    - "arxiv.org"
+  news:
+    - "reuters.com"
+    - "apnews.com"
+    - "bbc.com"
+    - "thepaper.cn"
+    - "caixin.com"
+  tech:
+    - "github.com"
+    - "huggingface.co"
+    - "36kr.com"
+    - "jiqizhixin.com"
+  social:
+    - "reddit.com"
+    - "v2ex.com"
+    - "twitter.com"
+    - "hn"

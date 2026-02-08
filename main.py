@@ -1,4 +1,4 @@
-"""Main entry point for the Daily Report Generator v2.0."""
+"""Main entry point for the Daily Report Generator v3.0."""
 
 import os
 import sys
@@ -11,6 +11,9 @@ from typing import Any
 from dotenv import load_dotenv
 
 from src.utils.logger import setup_logger
+from src.config import config
+
+# v2.0 Fetchers
 from src.fetchers.hn_fetcher import HNFetcher
 from src.fetchers.hn_show_fetcher import HNShowFetcher
 from src.fetchers.github_fetcher import GitHubFetcher
@@ -19,6 +22,30 @@ from src.fetchers.ai_news_fetcher import AINewsFetcher
 from src.fetchers.ph_fetcher import ProductHuntFetcher
 from src.fetchers.reddit_fetcher import RedditAIFetcher
 from src.fetchers.v2ex_fetcher import V2EXFetcher
+
+# v3.0 News Fetchers
+from src.fetchers.news.reuters_fetcher import ReutersFetcher
+from src.fetchers.news.ap_news_fetcher import APNewsFetcher
+from src.fetchers.news.bbc_fetcher import BBCWorldFetcher
+
+# v3.0 China Fetchers
+from src.fetchers.china.jinri_remai_fetcher import JinriRemaiFetcher
+from src.fetchers.china.sina_fetcher import SinaFetcher
+from src.fetchers.china.ifeng_fetcher import IfengFetcher
+from src.fetchers.china.pengpai_fetcher import PengpaiFetcher
+from src.fetchers.china.caixin_fetcher import CaixinFetcher
+
+# v3.0 Supplementary Fetchers
+from src.fetchers.twitter_fetcher import TwitterFetcher
+from src.fetchers.arxiv_fetcher import ArxivFetcher
+
+# v3.0 Processors
+from src.processor.temporal_filter import TemporalFilter
+from src.processor.deduplicator import Deduplicator
+from src.processor.clustering import Clusterer
+from src.processor.timeline_tracker import TimelineTracker
+from src.storage.raw_data_manager import RawDataManager
+
 from src.generator import LLMClient
 from src.storage import ObsidianWriter
 
@@ -92,13 +119,75 @@ def fetch_hn_show_data() -> dict[str, Any]:
     return fetcher.fetch()
 
 
-def fetch_all_data_parallel() -> tuple:
+# v3.0 News Fetchers
+def fetch_reuters_data() -> list[dict[str, Any]]:
+    """Fetch Reuters world news."""
+    fetcher = ReutersFetcher()
+    return fetcher.fetch(limit=10)
+
+
+def fetch_ap_news_data() -> list[dict[str, Any]]:
+    """Fetch AP News stories."""
+    fetcher = APNewsFetcher()
+    return fetcher.fetch(limit=10)
+
+
+def fetch_bbc_data() -> list[dict[str, Any]]:
+    """Fetch BBC World News."""
+    fetcher = BBCWorldFetcher()
+    return fetcher.fetch(limit=10)
+
+
+# v3.0 China Fetchers
+def fetch_jinri_remai_data() -> list[dict[str, Any]]:
+    """Fetch AI news from Jinri Toutiao."""
+    fetcher = JinriRemaiFetcher()
+    return fetcher.fetch(limit=10)
+
+
+def fetch_sina_data() -> list[dict[str, Any]]:
+    """Fetch news from Sina."""
+    fetcher = SinaFetcher()
+    return fetcher.fetch(limit=10)
+
+
+def fetch_ifeng_data() -> list[dict[str, Any]]:
+    """Fetch news from Ifeng."""
+    fetcher = IfengFetcher()
+    return fetcher.fetch(limit=10)
+
+
+def fetch_pengpai_data() -> list[dict[str, Any]]:
+    """Fetch news from 澎湃新闻."""
+    fetcher = PengpaiFetcher()
+    return fetcher.fetch(limit=10)
+
+
+def fetch_caixin_data() -> list[dict[str, Any]]:
+    """Fetch news from 财新."""
+    fetcher = CaixinFetcher()
+    return fetcher.fetch(limit=10)
+
+
+# v3.0 Supplementary Fetchers
+def fetch_twitter_data() -> list[dict[str, Any]]:
+    """Fetch AI tweets from Twitter/X."""
+    fetcher = TwitterFetcher()
+    return fetcher.fetch(limit_per_user=5)
+
+
+def fetch_arxiv_data() -> list[dict[str, Any]]:
+    """Fetch AI papers from ArXiv."""
+    fetcher = ArxivFetcher()
+    return fetcher.fetch(max_results=20, days_back=14)
+
+
+# v2.0 Parallel Fetch
+def fetch_all_v2_data_parallel() -> dict[str, Any]:
     """Fetch all v2.0 data sources in parallel."""
-    from src.utils.logger import setup_logger
     logger = setup_logger("fetcher")
     logger.info("Starting v2.0 parallel data fetch")
 
-    # v2.0: 8 data sources
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {
             "hn": executor.submit(fetch_hn_data),
@@ -115,33 +204,159 @@ def fetch_all_data_parallel() -> tuple:
         for future in as_completed(futures.values()):
             for key, f in futures.items():
                 if f is future or f == future:
-                    results[key] = future.result()
-                    logger.info(f"{key.upper()} fetched: {len(results.get(key, [])) if isinstance(results.get(key), list) else 'dict'}")
+                    try:
+                        results[key] = future.result()
+                        count = len(results.get(key, [])) if isinstance(results.get(key), list) else 'dict'
+                        logger.info(f"{key.upper()} fetched: {count}")
+                    except Exception as e:
+                        logger.error(f"{key.upper()} failed: {e}")
+                        results[key] = []
                     break
 
-    return (
-        results.get("hn", {}),
-        results.get("gh", {}),
-        results.get("hf", []),
-        results.get("ai_news", []),
-        results.get("ph", []),
-        results.get("reddit", []),
-        results.get("v2ex", []),
-        results.get("hn_show", {}),
-    )
+    return results
 
 
-def generate_report(hn_data, gh_data, hf_data, ai_news_data, ph_data, reddit_data, v2ex_data, hn_show_data, api_key: str) -> str:
-    """Generate v2.0 markdown report."""
+# v3.0 Full Fetch
+def fetch_all_v3_data_parallel() -> dict[str, Any]:
+    """Fetch all v3.0 data sources in parallel."""
+    logger = setup_logger("fetcher")
+    logger.info("Starting v3.0 full parallel data fetch")
+
+    # Initialize processors
+    temporal_filter = TemporalFilter()
+    deduplicator = Deduplicator()
+    clusterer = Clusterer()
+    timeline_tracker = TimelineTracker()
+    raw_data_manager = RawDataManager()
+
+    # v3.0 has 8 original + 3 news + 5 china + 2 supplementary = 18 sources
+    fetchers = {
+        # v2.0 Original
+        "hn": fetch_hn_data,
+        "gh": fetch_github_data,
+        "hf": fetch_hf_data,
+        "ai_news": fetch_ai_news_data,
+        "ph": fetch_ph_data,
+        "reddit": fetch_reddit_data,
+        "v2ex": fetch_v2ex_data,
+        "hn_show": fetch_hn_show_data,
+        # v3.0 News
+        "reuters": fetch_reuters_data,
+        "ap_news": fetch_ap_news_data,
+        "bbc": fetch_bbc_data,
+        # v3.0 China
+        "jinri_remai": fetch_jinri_remai_data,
+        "sina": fetch_sina_data,
+        "ifeng": fetch_ifeng_data,
+        "pengpai": fetch_pengpai_data,
+        "caixin": fetch_caixin_data,
+        # v3.0 Supplementary
+        "twitter": fetch_twitter_data,
+        "arxiv": fetch_arxiv_data,
+    }
+
+    results = {}
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        future_to_key = {executor.submit(fn): key for key, fn in fetchers.items()}
+
+        for future in as_completed(future_to_key):
+            key = future_to_key[future]
+            try:
+                data = future.result()
+                results[key] = data
+
+                # Apply temporal filtering
+                source_type = _get_source_type(key)
+                if source_type:
+                    data = temporal_filter.filter_by_time(data, source_type)
+
+                # Save raw data for incremental fetching
+                raw_data_manager.save_raw(key, data)
+
+                count = len(data) if isinstance(data, (list, dict)) else 0
+                logger.info(f"{key.upper()} fetched: {count} items")
+            except Exception as e:
+                logger.error(f"{key.upper()} failed: {e}")
+                results[key] = []
+
+    # Cross-source deduplication
+    all_items = []
+    for source_data in results.values():
+        if isinstance(source_data, list):
+            for item in source_data:
+                item["_source"] = source_data if hasattr(source_data, "__iter__") else key
+                all_items.append(item)
+        elif isinstance(source_data, dict):
+            for item_list in source_data.values():
+                if isinstance(item_list, list):
+                    for item in item_list:
+                        item["_source"] = key
+                        all_items.append(item)
+
+    deduplicated = deduplicator.deduplicate(all_items)
+
+    # Clustering
+    clusters = clusterer.cluster(deduplicated)
+
+    # Timeline tracking
+    timeline = timeline_tracker.track(deduplicated)
+
+    return {
+        "raw_results": results,
+        "deduplicated": deduplicated,
+        "clusters": clusters,
+        "timeline": timeline,
+    }
+
+
+def _get_source_type(source: str) -> str:
+    """Map source to source type for temporal filtering."""
+    source_types = {
+        "hn": "social",
+        "github": "github",
+        "hf": "paper",
+        "ai_news": "news",
+        "ph": "social",
+        "reddit": "social",
+        "v2ex": "social",
+        "hn_show": "social",
+        "reuters": "news",
+        "ap_news": "news",
+        "bbc": "news",
+        "jinri_remai": "news",
+        "sina": "news",
+        "ifeng": "news",
+        "pengpai": "news",
+        "caixin": "news",
+        "twitter": "social",
+        "arxiv": "paper",
+    }
+    return source_types.get(source, "default")
+
+
+def generate_v2_report(
+    results: dict[str, Any],
+    api_key: str
+) -> str:
+    """Generate v2.0 style report."""
+    logger = setup_logger("generator")
+    logger.info("Generating v2.0 report")
+
     client = LLMClient(api_key=api_key)
 
-    stories = hn_data.get("stories", [])
-    gh_repos = gh_data.get("trending", []) + gh_data.get("ai_trending", [])
-    showhn_posts = hn_show_data.get("posts", [])
+    hn_data = results.get("hn", {}).get("stories", [])
+    gh_data = results.get("gh", {}).get("trending", []) + results.get("gh", {}).get("ai_trending", [])
+    showhn_posts = results.get("hn_show", {}).get("posts", [])
+    v2ex_data = results.get("v2ex", [])
+    ai_news_data = results.get("ai_news", [])
+    ph_data = results.get("ph", [])
+    reddit_data = results.get("reddit", [])
+    hf_data = results.get("hf", [])
 
     return client.generate_report(
-        hn_data=stories,
-        gh_data=gh_repos,
+        hn_data=hn_data,
+        gh_data=gh_data,
         hf_data=hf_data,
         showhn_data=showhn_posts,
         v2ex_data=v2ex_data,
@@ -151,23 +366,45 @@ def generate_report(hn_data, gh_data, hf_data, ai_news_data, ph_data, reddit_dat
     )
 
 
+def generate_v3_report(
+    results: dict[str, Any],
+    api_key: str
+) -> str:
+    """Generate v3.0 enhanced report."""
+    logger = setup_logger("generator")
+    logger.info("Generating v3.0 report")
+
+    # Import v3 generator (to be created)
+    from src.generator_v3 import LLMClientV3
+
+    client = LLMClientV3(api_key=api_key)
+
+    return client.generate_report(
+        raw_results=results["raw_results"],
+        clusters=results["clusters"],
+        timeline=results["timeline"],
+    )
+
+
 def save_report(content: str, vault_path: str) -> Path:
     """Save report to Obsidian vault."""
     writer = ObsidianWriter(vault_path=vault_path)
     return writer.write_report(content)
 
 
-def main() -> int:
-    """Main entry point."""
+def main(mode: str = "v2") -> int:
+    """Main entry point.
+
+    Args:
+        mode: "v2" for original 8 sources, "v3" for full 18 sources
+    """
     logger = setup_logger("daily_report")
+    logger.info(f"Starting Cloud927 v{mode} Daily Report Generator")
 
     try:
         logger.info("Loading environment variables")
         if not load_environment():
             logger.warning(".env not found")
-        logger.info("=" * 50)
-        logger.info("Starting Cloud927 v2.0 Daily Report Generator")
-        logger.info("=" * 50)
 
         obsidian_path = os.environ.get("OBSIDIAN_VAULT_PATH", "")
         api_key = os.environ.get("GEMINI_API_KEY", "")
@@ -184,32 +421,40 @@ def main() -> int:
 
         logger.info(f"Vault: {obsidian_path}")
 
-        # Fetch v2.0 data
-        logger.info("Fetching from 8 data sources...")
-        hn_data, gh_data, hf_data, ai_news_data, ph_data, reddit_data, v2ex_data, hn_show_data = fetch_all_data_parallel()
+        if mode == "v2":
+            # v2.0 Mode
+            logger.info("Fetching from 8 v2.0 data sources...")
+            results = fetch_all_v2_data_parallel()
 
-        logger.info(f"HN: {len(hn_data.get('stories', []))} stories")
-        logger.info(f"GitHub: {len(gh_data.get('trending', []))} trending, {len(gh_data.get('ai_trending', []))} AI")
-        logger.info(f"HuggingFace: {len(hf_data)} papers")
-        logger.info(f"AI News: {len(ai_news_data)} articles")
-        logger.info(f"Product Hunt: {len(ph_data)} products")
-        logger.info(f"Reddit: {len(reddit_data)} discussions")
-        logger.info(f"V2EX: {len(v2ex_data)} posts")
-        logger.info(f"Show HN: {len(hn_show_data.get('posts', []))} posts")
+            logger.info(f"HN: {len(results.get('hn', {}).get('stories', []))} stories")
+            logger.info(f"GitHub: {len(results.get('gh', {}).get('trending', []))} trending")
+            logger.info(f"HuggingFace: {len(results.get('hf', []))} papers")
+            logger.info(f"AI News: {len(results.get('ai_news', []))} articles")
+            logger.info(f"Product Hunt: {len(results.get('ph', []))} products")
+            logger.info(f"Reddit: {len(results.get('reddit', []))} discussions")
+            logger.info(f"V2EX: {len(results.get('v2ex', []))} posts")
 
-        # Generate v2.0 report
-        logger.info("Generating v2.0 report...")
-        report = generate_report(
-            hn_data, gh_data, hf_data, ai_news_data, ph_data, reddit_data, v2ex_data, hn_show_data, api_key
-        )
+            logger.info("Generating v2.0 report...")
+            report = generate_v2_report(results, api_key)
+
+        else:
+            # v3.0 Mode
+            logger.info("Fetching from 18 v3.0 data sources...")
+            results = fetch_all_v3_data_parallel()
+
+            logger.info("Processing data (deduplication, clustering, timeline)...")
+            logger.info(f"Clusters: {list(results['clusters'].keys())}")
+
+            logger.info("Generating v3.0 report...")
+            report = generate_v3_report(results, api_key)
 
         # Save
         logger.info("Saving report...")
         filepath = save_report(report, obsidian_path)
 
-        logger.info(f"✅ Report saved: {filepath}")
+        logger.info(f"Report saved: {filepath}")
         logger.info("=" * 50)
-        logger.info("Cloud927 v2.0 completed successfully!")
+        logger.info(f"Cloud927 v{mode} completed successfully!")
         logger.info("=" * 50)
 
         return 0
@@ -223,4 +468,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    mode = sys.argv[1] if len(sys.argv) > 1 else "v2"
+    sys.exit(main(mode))

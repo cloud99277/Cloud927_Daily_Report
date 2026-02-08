@@ -1,6 +1,13 @@
+# Core Dependencies
 google-genai
 beautifulsoup4
 requests
 tenacity
 python-dotenv
 python-dateutil
+pyyaml
+
+# v3.0 Optional Dependencies
+# faiss-cpu==1.7.3        # Similarity retrieval (optional)
+# scikit-learn==1.3.2     # Clustering (optional)
+jieba==0.42.1             # Chinese word segmentation
