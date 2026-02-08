@@ -282,10 +282,10 @@ def fetch_all_v3_data_parallel() -> dict[str, Any]:
 
     # Cross-source deduplication
     all_items = []
-    for source_data in results.values():
+    for key, source_data in results.items():
         if isinstance(source_data, list):
             for item in source_data:
-                item["_source"] = source_data if hasattr(source_data, "__iter__") else key
+                item["_source"] = key
                 all_items.append(item)
         elif isinstance(source_data, dict):
             for item_list in source_data.values():

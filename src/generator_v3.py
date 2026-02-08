@@ -193,10 +193,24 @@ class LLMClientV3:
     ) -> str:
         """Build v3.0 prompt with clustered data."""
 
-        # Organize data by source group
+        def safe_get_items(data: Any, key: str, default: list | None = None) -> list:
+            """Safely extract items from raw_results, handling dict and list formats."""
+            if default is None:
+                default = []
+            if not isinstance(data, dict):
+                return default
+            value = data.get(key, default)
+            if not isinstance(value, list):
+                return default
+            return value
+
+        # Organize data by source group - handle both dict and list formats
+        hn_data = raw_results.get("hn", {})
+        gh_data = raw_results.get("gh", {})
+
         ai_tech = {
-            "hn": raw_results.get("hn", {}).get("stories", [])[:5],
-            "github": raw_results.get("gh", {}).get("trending", [])[:5],
+            "hn": safe_get_items(hn_data, "stories", [])[:5] if isinstance(hn_data, dict) else (hn_data[:5] if isinstance(hn_data, list) else []),
+            "github": safe_get_items(gh_data, "trending", [])[:5] if isinstance(gh_data, dict) else (gh_data[:5] if isinstance(gh_data, list) else []),
             "hf": raw_results.get("hf", [])[:5],
             "ai_news": raw_results.get("ai_news", [])[:5],
             "reddit": raw_results.get("reddit", [])[:3],
