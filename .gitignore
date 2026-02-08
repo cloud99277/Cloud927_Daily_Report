@@ -1,7 +1,16 @@
 .env
+.env.local
 __pycache__/
 *.pyc
 logs/
-.env.local
 *.log
 .DS_Store
+data/
+venv/
+.brain
+.frameworks
+.claude/
+languages
+languages.json
+patterns
+patterns.json
