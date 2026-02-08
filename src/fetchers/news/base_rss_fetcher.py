@@ -3,7 +3,7 @@
 import logging
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
@@ -70,7 +70,7 @@ class BaseRSSFetcher(ABC):
             try:
                 dt = datetime.strptime(date_str.strip(), fmt)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                    dt = dt.replace(tzinfo=timezone.utc)
                 return int(dt.timestamp())
             except ValueError:
                 continue

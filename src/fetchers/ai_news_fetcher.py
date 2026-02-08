@@ -1,142 +1,97 @@
-"""AI News API Fetcher for OpenAI, Anthropic, Google AI, Meta AI official sources."""
-import json
-import logging
+"""AI News Fetcher for official AI company blogs."""
+
+from datetime import datetime, timezone
 from typing import Any
 
-import requests
 from bs4 import BeautifulSoup
-from tenacity import retry, stop_after_attempt, wait_exponential
 
-logger = logging.getLogger(__name__)
+from src.fetchers.base_fetcher import BaseFetcher
+from src.models import NewsItem
+from src.utils.logger import setup_logger
 
-# Mock data as fallback
-MOCK_AI_NEWS = [
-    {
-        "title": "OpenAI announces GPT-4.5 with improved reasoning",
-        "url": "https://openai.com/blog/gpt-4-5",
-        "source": "OpenAI",
-        "published_at": "2026-02-08",
-        "summary": "OpenAI releases GPT-4.5 with enhanced reasoning capabilities and lower latency.",
-        "category": "model",
-    },
-    {
-        "title": "Anthropic releases Claude 3.7 with extended context",
-        "url": "https://www.anthropic.com/news/claude-3-7",
-        "source": "Anthropic",
-        "published_at": "2026-02-07",
-        "summary": "Claude 3.7 brings 200K context window and improved coding abilities.",
-        "category": "model",
-    },
-    {
-        "title": "Google DeepMind shares new reasoning techniques",
-        "url": "https://deepmind.google/blog/new-reasoning",
-        "source": "Google DeepMind",
-        "published_at": "2026-02-06",
-        "summary": "New AI reasoning techniques achieve state-of-the-art on math benchmarks.",
-        "category": "research",
-    },
-]
+logger = setup_logger(__name__)
 
 
-class AINewsFetcher:
-    """Fetch AI news from official company blogs and APIs."""
+class AINewsFetcher(BaseFetcher):
+    """Fetch AI news from official company blogs via HTML scraping."""
 
-    def __init__(self, timeout: int = 30):
-        self.timeout = timeout
-        self.sources = [
-            {
-                "name": "OpenAI",
-                "url": "https://openai.com/blog/",
-                "type": "html",
-                "selector": "article a[href*='/blog/']",
-            },
-            {
-                "name": "Anthropic",
-                "url": "https://www.anthropic.com/news",
-                "type": "html",
-                "selector": "article a[href*='/news/']",
-            },
-            {
-                "name": "Google DeepMind",
-                "url": "https://deepmind.google/blog",
-                "type": "html",
-                "selector": "article a[href*='/blog']",
-            },
-            {
-                "name": "Meta AI",
-                "url": "https://ai.meta.com/blog/",
-                "type": "html",
-                "selector": "article a[href*='/blog/']",
-            },
-        ]
+    SOURCES = [
+        {
+            "name": "OpenAI",
+            "url": "https://openai.com/blog/",
+            "selector": "article a[href*='/blog/']",
+        },
+        {
+            "name": "Anthropic",
+            "url": "https://www.anthropic.com/news",
+            "selector": "article a[href*='/news/']",
+        },
+        {
+            "name": "Google DeepMind",
+            "url": "https://deepmind.google/blog",
+            "selector": "article a[href*='/blog']",
+        },
+        {
+            "name": "Meta AI",
+            "url": "https://ai.meta.com/blog/",
+            "selector": "article a[href*='/blog/']",
+        },
+    ]
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    def __init__(self):
+        super().__init__(source_name="ai_news", source_type="news", language="en")
+
+    def _fetch_raw(self) -> list[dict]:
+        """Scrape news items from all AI company blogs."""
+        all_items: list[dict] = []
+        for source in self.SOURCES:
+            items = self._fetch_source(source)
+            all_items.extend(items)
+        return all_items
+
     def _fetch_source(self, source: dict) -> list[dict]:
-        """Fetch news from a single source."""
+        """Fetch news from a single blog source."""
         try:
-            headers = {
-                "User-Agent": "Cloud927-Daily-Report/2.0",
-            }
-            response = requests.get(source["url"], timeout=self.timeout, headers=headers)
-            response.raise_for_status()
-
-            soup = BeautifulSoup(response.text, "html.parser")
+            resp = self._make_request(source["url"])
+            soup = BeautifulSoup(resp.text, "html.parser")
             items = []
 
             for elem in soup.select(source["selector"])[:5]:
-                try:
-                    title_elem = elem.find(string=True, recursive=False) or elem.find("h2") or elem.find("h3")
-                    title = title_elem.strip() if title_elem else elem.get_text(strip=True)
+                title_elem = (
+                    elem.find(string=True, recursive=False)
+                    or elem.find("h2")
+                    or elem.find("h3")
+                )
+                title = (
+                    title_elem.strip() if title_elem else elem.get_text(strip=True)
+                )
 
-                    href = elem.get("href", "")
-                    if href and not href.startswith("http"):
-                        if href.startswith("/"):
-                            base_url = source["url"].split("/blog")[0]
-                            href = base_url + href
-                        else:
-                            href = source["url"].rstrip("/") + "/" + href.lstrip("/")
+                href = elem.get("href", "")
+                if href and not href.startswith("http"):
+                    base = source["url"].split("/blog")[0]
+                    href = base + ("" if href.startswith("/") else "/") + href
 
-                    if title and len(title) > 10:
-                        items.append({
-                            "title": title,
-                            "url": href if href.startswith("http") else source["url"],
-                            "source": source["name"],
-                            "category": source["name"],
-                        })
-                except Exception:
-                    continue
-
+                if title and len(title) > 10:
+                    items.append({
+                        "title": title,
+                        "url": href if href.startswith("http") else source["url"],
+                        "blog_source": source["name"],
+                    })
             return items
-
         except Exception as e:
             logger.debug(f"Failed to fetch {source['name']}: {e}")
             return []
 
-    def fetch(self) -> list[dict[str, Any]]:
-        """Fetch AI news from all sources."""
-        logger.info("Starting AI news fetch")
-
-        all_news = []
-        for source in self.sources:
-            items = self._fetch_source(source)
-            all_news.extend(items)
-            logger.info(f"Fetched {len(items)} items from {source['name']}")
-
-        if not all_news:
-            logger.warning("No AI news found, using mock data")
-            return MOCK_AI_NEWS
-
-        # Sort by source priority and limit
-        priority_order = {"OpenAI": 1, "Anthropic": 2, "Google DeepMind": 3, "Meta AI": 4}
-        all_news.sort(key=lambda x: priority_order.get(x.get("source", ""), 5))
-
-        return all_news[:10]
-
-    def to_json(self) -> str:
-        """Return news as JSON string."""
-        return json.dumps(self.fetch(), ensure_ascii=False, indent=2)
-
-
-if __name__ == "__main__":
-    fetcher = AINewsFetcher()
-    print(fetcher.to_json())
+    def _parse_item(self, raw_item: Any) -> NewsItem:
+        """Convert scraped blog item into NewsItem."""
+        item = raw_item
+        return NewsItem(
+            title=item.get("title", ""),
+            url=item.get("url", ""),
+            source=self.source_name,
+            timestamp=datetime.now(tz=timezone.utc),
+            content="",
+            source_type=self.source_type,
+            language=self.language,
+            metadata={"blog_source": item.get("blog_source", "")},
+        )

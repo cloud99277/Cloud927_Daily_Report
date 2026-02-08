@@ -1,113 +1,75 @@
-"""Hugging Face daily papers fetcher."""
-import json
-import logging
+"""Hugging Face daily papers fetcher (HTML scraping fallback)."""
+
+from datetime import datetime, timezone
 from typing import Any
 
-import requests
 from bs4 import BeautifulSoup
-from tenacity import retry, stop_after_attempt, wait_exponential
 
-logger = logging.getLogger(__name__)
+from src.fetchers.base_fetcher import BaseFetcher
+from src.models import NewsItem
+from src.utils.logger import setup_logger
 
-# Mock data as fallback
-MOCK_PAPERS = [
-    {
-        "name": "Llama 3: The Future of Open LLMs",
-        "abstract": "This paper introduces Llama 3, a state-of-the-art open language model with improved reasoning and multilingual capabilities. The model achieves competitive performance with closed-source alternatives while remaining open for research use.",
-        "url": "https://huggingface.co/papers/llama3",
-        "tags": ["llm", "transformer", "multilingual"],
-    },
-    {
-        "name": "Stable Diffusion 3: Improved Text-to-Image",
-        "abstract": "A novel diffusion model architecture that significantly improves text understanding and image quality. Uses a multimodal transformer backbone for better alignment between text and image representations.",
-        "url": "https://huggingface.co/papers/sd3",
-        "tags": ["diffusion", "vision", "multimodal"],
-    },
-    {
-        "name": "Efficient Vision Transformers Survey",
-        "abstract": "A comprehensive survey of methods to improve the efficiency of Vision Transformers, including pruning, quantization, and architectural innovations. Covers recent advances in making ViTs practical for edge deployment.",
-        "url": "https://huggingface.co/papers/efficient-vits",
-        "tags": ["vision", "efficiency", "survey"],
-    },
-]
+logger = setup_logger(__name__)
 
 
-class HuggingFaceFetcher:
-    """Fetch daily papers from Hugging Face."""
+class HuggingFaceFetcher(BaseFetcher):
+    """Fetch daily papers from Hugging Face papers page via HTML."""
 
     def __init__(self):
+        super().__init__(source_name="hf", source_type="paper", language="en")
         self.base_url = "https://huggingface.co/papers"
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-    def _fetch_html(self) -> str:
-        """Fetch HTML page with retry logic."""
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }
-        response = requests.get(self.base_url, timeout=30, headers=headers)
-        response.raise_for_status()
-        return response.text
+    def _fetch_raw(self) -> list[dict]:
+        """Fetch and parse paper cards from HF papers page."""
+        resp = self._make_request(self.base_url)
+        soup = BeautifulSoup(resp.text, "html.parser")
 
-    def fetch(self) -> list[dict[str, Any]]:
-        """Fetch daily papers from Hugging Face papers page."""
-        logger.info("Starting HF papers fetch")
+        cards = (
+            soup.select("article")
+            or soup.select(".paper-card")
+            or soup.select("[data-target='PaperCard']")
+        )
 
+        papers = []
+        for card in cards[:5]:
+            parsed = self._parse_card(card)
+            if parsed:
+                papers.append(parsed)
+        return papers
+
+    def _parse_card(self, card: Any) -> dict | None:
+        """Parse a paper card element."""
         try:
-            html = self._fetch_html()
-            soup = BeautifulSoup(html, "html.parser")
-
-            papers = []
-            # Find paper cards on the page
-            paper_cards = soup.select("article") or soup.select(".paper-card") or soup.select("[data-target='PaperCard']")
-
-            for card in paper_cards[:5]:
-                paper = self._parse_paper_card(card)
-                if paper:
-                    papers.append(paper)
-
-            if papers:
-                logger.info(f"Fetched {len(papers)} papers from HTML")
-                return papers[:3]  # Return top 3
-
-            # If no papers found from HTML parsing, use mock data
-            logger.warning("No papers parsed from HTML, using mock data")
-            return MOCK_PAPERS
-
-        except Exception as e:
-            logger.error(f"Failed to fetch HF papers: {e}, using mock data")
-            return MOCK_PAPERS
-
-    def _parse_paper_card(self, card) -> dict[str, Any] | None:
-        """Parse a paper card element into structured data."""
-        try:
-            # Try to find title
-            title_elem = card.select_one("h3") or card.select_one("h2") or card.select_one(".title") or card.select_one("a")
+            title_elem = (
+                card.select_one("h3")
+                or card.select_one("h2")
+                or card.select_one(".title")
+                or card.select_one("a")
+            )
             title = title_elem.get_text(strip=True) if title_elem else "Unknown Paper"
 
-            # Try to find link
             link_elem = card.select_one("a")
             url = ""
             if link_elem and link_elem.get("href"):
                 href = link_elem.get("href")
                 url = f"https://huggingface.co{href}" if href.startswith("/") else href
 
-            # Try to find abstract/description
-            abstract_elem = card.select_one("p") or card.select_one(".description") or card.select_one(".abstract")
-            abstract = abstract_elem.get_text(strip=True) if abstract_elem else "No abstract available"
-            if len(abstract) > 500:
-                abstract = abstract[:497] + "..."
+            abstract_elem = (
+                card.select_one("p")
+                or card.select_one(".description")
+                or card.select_one(".abstract")
+            )
+            abstract = abstract_elem.get_text(strip=True) if abstract_elem else ""
 
-            # Try to find tags
-            tags = []
-            tag_elems = card.select(".tag") or card.select("[data-target='Tag']")
-            for tag_elem in tag_elems:
-                tag_text = tag_elem.get_text(strip=True)
-                if tag_text:
-                    tags.append(tag_text)
+            tags = [
+                t.get_text(strip=True)
+                for t in (card.select(".tag") or card.select("[data-target='Tag']"))
+                if t.get_text(strip=True)
+            ]
 
             return {
-                "name": title,
-                "abstract": abstract,
+                "title": title,
+                "abstract": abstract[:500],
                 "url": url or "https://huggingface.co/papers",
                 "tags": tags,
             }
@@ -115,6 +77,16 @@ class HuggingFaceFetcher:
             logger.debug(f"Failed to parse paper card: {e}")
             return None
 
-    def to_json(self) -> str:
-        """Return papers as JSON string."""
-        return json.dumps(self.fetch(), ensure_ascii=False, indent=2)
+    def _parse_item(self, raw_item: Any) -> NewsItem:
+        """Convert parsed paper dict into NewsItem."""
+        paper = raw_item
+        return NewsItem(
+            title=paper.get("title", ""),
+            url=paper.get("url", ""),
+            source=self.source_name,
+            timestamp=datetime.now(tz=timezone.utc),
+            content=paper.get("abstract", ""),
+            source_type=self.source_type,
+            language=self.language,
+            metadata={"tags": paper.get("tags", [])},
+        )

@@ -109,22 +109,23 @@ class Deduplicator:
         group_by_source: bool = False
     ) -> list[dict]:
         """
-        Deduplicate a list of items.
+        Deduplicate a list of items, tracking cross-source counts.
+
+        When duplicates are found, the kept item receives:
+        - cross_source_count: number of sources that reported the same event
+        - reported_by: list of source names that reported it
 
         Args:
             items: List of items with 'title' and 'url' fields
             group_by_source: If True, only deduplicate within same source
 
         Returns:
-            Deduplicated list of items
+            Deduplicated list of items with cross-source metadata
         """
         if not items:
             return []
 
         logger.info(f"Deduplicating {len(items)} items")
-        seen_fingerprints = set()
-        seen_titles = {}
-        results = []
 
         # Sort by priority first (higher priority sources first)
         sorted_items = sorted(
@@ -133,54 +134,90 @@ class Deduplicator:
             reverse=True
         )
 
+        # Map from kept-item title -> index in results list
+        seen_fingerprints = set()
+        seen_titles: dict[str, int] = {}  # title -> index in results
+        results: list[dict] = []
+
         for item in sorted_items:
             title = item.get("title", "")
-            url = item.get("url", "")
             source = item.get("source", "unknown")
 
-            # Skip if already seen
             fingerprint = self._create_fingerprint(item)
             if fingerprint in seen_fingerprints:
-                logger.debug(f"Skipping duplicate (fingerprint): {title[:50]}...")
+                # Exact fingerprint match - merge source info into existing
+                self._merge_source_into(results, seen_titles, title, source)
                 continue
 
             # Check for similar titles
-            is_duplicate = False
-            for seen_title, seen_source in seen_titles.items():
-                similarity = self._calculate_similarity(title, seen_title)
+            matched_title = self._find_matching_title(
+                title, source, item, seen_titles, results, group_by_source
+            )
 
-                if similarity >= self.exact_match_threshold:
-                    # Exact match - always skip
-                    is_duplicate = True
-                    logger.debug(f"Skipping exact duplicate: {title[:50]}...")
-                    break
-                elif similarity >= self.fuzzy_match_threshold:
-                    # Fuzzy match - check if we should keep this one
-                    if group_by_source and source == seen_source:
-                        is_duplicate = True
-                        logger.debug(f"Skipping same-source duplicate: {title[:50]}...")
-                        break
-                    elif self._get_source_priority(item) > self.source_priority.get(seen_source, 50):
-                        # Higher priority source - replace the old one
-                        logger.debug(f"Replacing lower priority duplicate: {seen_title[:50]}...")
-                        seen_titles.pop(seen_title)
-                        if fingerprint not in seen_fingerprints:
-                            break
-                    else:
-                        is_duplicate = True
-                        logger.debug(f"Skipping fuzzy duplicate: {title[:50]}...")
-                        break
-
-            if is_duplicate:
+            if matched_title is not None:
+                # Duplicate found - merge source info
+                self._merge_source_into(results, seen_titles, matched_title, source)
                 continue
 
-            # Add to results
+            # New unique item - initialize cross-source metadata
+            item["cross_source_count"] = 1
+            item["reported_by"] = [source]
             seen_fingerprints.add(fingerprint)
-            seen_titles[title] = source
+            seen_titles[title] = len(results)
             results.append(item)
 
         logger.info(f"Deduplication complete: {len(items)} -> {len(results)} items")
         return results
+
+    def _find_matching_title(
+        self,
+        title: str,
+        source: str,
+        item: dict,
+        seen_titles: dict[str, int],
+        results: list[dict],
+        group_by_source: bool,
+    ) -> str | None:
+        """Find a matching title in seen_titles. Returns the matched title or None."""
+        for seen_title, idx in list(seen_titles.items()):
+            similarity = self._calculate_similarity(title, seen_title)
+
+            if similarity >= self.exact_match_threshold:
+                return seen_title
+            elif similarity >= self.fuzzy_match_threshold:
+                seen_source = results[idx].get("source", "unknown")
+                if group_by_source and source == seen_source:
+                    return seen_title
+                elif self._get_source_priority(item) > self.source_priority.get(seen_source, 50):
+                    # Higher priority: replace the kept item but preserve its metadata
+                    old = results[idx]
+                    item["cross_source_count"] = old.get("cross_source_count", 1)
+                    item["reported_by"] = list(old.get("reported_by", [seen_source]))
+                    results[idx] = item
+                    seen_titles[title] = idx
+                    del seen_titles[seen_title]
+                    return title  # will merge current source into the replaced item
+                else:
+                    return seen_title
+        return None
+
+    @staticmethod
+    def _merge_source_into(
+        results: list[dict],
+        seen_titles: dict[str, int],
+        matched_title: str,
+        source: str,
+    ) -> None:
+        """Merge a duplicate source into the kept item's metadata."""
+        idx = seen_titles.get(matched_title)
+        if idx is None:
+            return
+        kept = results[idx]
+        reported = kept.get("reported_by", [])
+        if source not in reported:
+            reported.append(source)
+            kept["reported_by"] = reported
+            kept["cross_source_count"] = len(reported)
 
     def deduplicate_by_source(self, items_by_source: dict[str, list[dict]]) -> dict[str, list[dict]]:
         """
@@ -204,44 +241,18 @@ class Deduplicator:
         """
         Merge duplicate items keeping metadata from all sources.
 
+        This is a convenience wrapper around deduplicate() which already
+        tracks cross_source_count and reported_by. The returned items
+        have those fields populated.
+
         Args:
             items: List of potentially duplicate items
 
         Returns:
-            List with merged duplicates grouped together
+            List with merged duplicates, each carrying cross_source_count
+            and reported_by metadata.
         """
-        if not items:
-            return []
-
-        # First deduplicate
-        unique_items = self.deduplicate(items)
-
-        # Group items that are similar but from different sources
-        clusters = {}
-        for item in unique_items:
-            title = item.get("title", "")
-            best_match = None
-            best_score = 0
-
-            for key, cluster in clusters.items():
-                score = self._calculate_similarity(title, key)
-                if score > best_score and score >= self.fuzzy_match_threshold:
-                    best_score = score
-                    best_match = key
-
-            if best_match:
-                clusters[best_match].append(item)
-            else:
-                clusters[title] = [item]
-
-        return [
-            {
-                **cluster[0],
-                "merged_sources": list(set(item.get("source", "unknown") for item in cluster)),
-                "merged_count": len(cluster),
-            }
-            for cluster in clusters.values()
-        ]
+        return self.deduplicate(items)
 
 
 if __name__ == "__main__":

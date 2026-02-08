@@ -14,40 +14,39 @@ class Clusterer:
     Uses keyword-based classification and LLM-like heuristics.
     """
 
-    # Topic keywords for classification
+    # Topic keywords for classification (6 sectors)
     TOPIC_KEYWORDS = {
-        "AI模型更新": [
-            "gpt", "llm", "model", "训练", "模型", "参数", "能力", "发布", "更新",
-            "openai", "anthropic", "gemini", "claude", "llama", "mistral"
+        "AI前沿": [
+            "gpt", "llm", "model", "claude", "gemini", "llama", "mistral",
+            "openai", "anthropic", "transformer", "训练", "模型", "参数",
+            "ai", "机器学习", "深度学习", "neural", "benchmark", "arxiv",
+            "论文", "research", "开源", "github", "framework", "huggingface",
         ],
-        "开源工具/框架": [
-            "github", "开源", "framework", "库", "工具", "库", "repository",
-            "release", "library", "toolkit", "sdk", "api"
+        "创业/投融资": [
+            "funding", "融资", "startup", "series", "ipo", "acquisition",
+            "收购", "techcrunch", "36kr", "投资", "估值", "valuation",
+            "venture", "capital", "angel", "seed", "unicorn", "独角兽",
         ],
-        "研究论文/突破": [
-            "paper", "论文", "research", "研究", "arxiv", "学术", "突破",
-            "benchmark", "experiment", "performance", "sota"
+        "金融/宏观": [
+            "stock", "market", "fed", "央行", "gdp", "inflation", "利率",
+            "bloomberg", "finance", "经济", "货币", "债券", "bond",
+            "treasury", "recession", "衰退", "cpi", "就业", "unemployment",
         ],
-        "产品发布/融资": [
-            "product", "产品", "launch", "发布", "funding", "融资", "investment",
-            "series", "ipo", "acquisition", "收购", "startup"
+        "Web3/Crypto": [
+            "bitcoin", "ethereum", "crypto", "blockchain", "defi", "nft",
+            "web3", "coindesk", "token", "mining", "挖矿", "交易所",
+            "wallet", "钱包", "solana", "layer2", "dao",
         ],
-        "行业动态/政策": [
-            "policy", "政策", "regulation", "监管", "regulation", "industry",
-            "行业", "market", "市场", "趋势", "trend"
+        "科技政策": [
+            "policy", "regulation", "监管", "政策", "法规", "antitrust",
+            "privacy", "数据安全", "合规", "compliance", "审查", "立法",
+            "legislation", "ban", "禁令", "制裁", "sanction",
         ],
-        "全球要闻": [
-            "war", "战争", "election", "选举", "president", "主席", "government",
-            "政府", "international", "国际", "外交", "制裁"
+        "全球重大事件": [
+            "war", "election", "选举", "government", "政府", "international",
+            "制裁", "reuters", "外交", "军事", "冲突", "conflict",
+            "summit", "峰会", "联合国", "nato", "地震", "灾害",
         ],
-        "中国社会": [
-            "中国", "国内", "北京", "上海", "深圳", "政府", "企业",
-            "两会", "十四五", "改革开放"
-        ],
-        "AI应用场景": [
-            "application", "应用", "use case", "案例", "医疗", "教育", "金融",
-            "自动驾驶", "智能", "ai", "assistant"
-        ]
     }
 
     def __init__(self, max_cluster_size: int = 5):
@@ -88,10 +87,17 @@ class Clusterer:
             score = 0
             for keyword in category_keywords:
                 keyword_lower = keyword.lower()
-                if keyword_lower in text_lower:
-                    # Check if keyword appears multiple times
-                    count = text_lower.count(keyword_lower)
-                    score += count
+                # Use word boundary for English keywords, plain `in` for Chinese
+                is_ascii = keyword_lower.isascii()
+                if is_ascii:
+                    match = re.search(r'\b' + re.escape(keyword_lower) + r'\b', text_lower)
+                    if match:
+                        count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', text_lower))
+                        score += count
+                else:
+                    if keyword_lower in text_lower:
+                        count = text_lower.count(keyword_lower)
+                        score += count
 
                 if keyword_lower in keywords:
                     score += 2  # Higher weight for extracted keywords
@@ -231,59 +237,68 @@ class Clusterer:
 
         for item in items:
             title = item.get("title", "").lower()
+            subcat = self._pick_subcategory(title, parent_category)
+            subcategories[subcat].append(item)
 
-            # AI subcategories
-            if parent_category == "AI模型更新":
-                if "gpt" in title or "openai" in title:
-                    subcategories["OpenAI/GPT系列"] = []
-                elif "claude" in title or "anthropic" in title:
-                    subcategories["Anthropic/Claude系列"] = []
-                elif "gemini" in title or "google" in title:
-                    subcategories["Google/Gemini系列"] = []
-                elif "llama" in title or "meta" in title:
-                    subcategories["Meta/LLaMA系列"] = []
-                else:
-                    subcategories["其他模型"] = []
+        return dict(subcategories)
 
-            elif parent_category == "开源工具/框架":
-                if "github" in title or "repository" in title:
-                    subcategories["GitHub项目"] = []
-                elif "library" in title or "framework" in title:
-                    subcategories["框架/库"] = []
-                elif "sdk" in title or "api" in title:
-                    subcategories["SDK/API"] = []
-                else:
-                    subcategories["其他工具"] = []
+    def _pick_subcategory(self, title: str, parent_category: str) -> str:
+        """Determine the subcategory name for an item based on its title."""
+        if parent_category == "AI前沿":
+            if "gpt" in title or "openai" in title:
+                return "OpenAI/GPT系列"
+            if "claude" in title or "anthropic" in title:
+                return "Anthropic/Claude系列"
+            if "gemini" in title or "google" in title:
+                return "Google/Gemini系列"
+            if "llama" in title or "meta" in title:
+                return "Meta/LLaMA系列"
+            if "arxiv" in title or "paper" in title or "论文" in title:
+                return "研究论文"
+            if "github" in title or "开源" in title:
+                return "开源项目"
+            return "其他"
 
-            elif parent_category == "研究论文/突破":
-                if "arxiv" in title:
-                    subcategories["arXiv论文"] = []
-                elif "benchmark" in title or "sota" in title:
-                    subcategories["基准测试"] = []
-                else:
-                    subcategories["研究进展"] = []
+        if parent_category == "创业/投融资":
+            if "funding" in title or "融资" in title or "investment" in title:
+                return "融资/投资"
+            if "ipo" in title:
+                return "IPO"
+            if "acquisition" in title or "收购" in title:
+                return "收购/并购"
+            return "创业动态"
 
-            elif parent_category == "产品发布/融资":
-                if "funding" in title or "investment" in title or "融资" in title:
-                    subcategories["融资/投资"] = []
-                elif "launch" in title or "发布" in title or "release" in title:
-                    subcategories["产品发布"] = []
-                elif "acquisition" in title or "收购" in title:
-                    subcategories["收购/并购"] = []
-                else:
-                    subcategories["行业动态"] = []
+        if parent_category == "金融/宏观":
+            if "fed" in title or "央行" in title or "利率" in title:
+                return "央行/货币政策"
+            if "stock" in title or "market" in title or "股" in title:
+                return "市场行情"
+            return "宏观经济"
 
-            else:
-                subcategories["最新动态"] = []
+        if parent_category == "Web3/Crypto":
+            if "bitcoin" in title or "btc" in title:
+                return "Bitcoin"
+            if "ethereum" in title or "eth" in title:
+                return "Ethereum"
+            if "defi" in title:
+                return "DeFi"
+            return "行业动态"
 
-            # Add item to appropriate subcategory
-            for subcat in subcategories:
-                if not subcategories[subcat]:
-                    subcategories[subcat].append(item)
-                    break
+        if parent_category == "科技政策":
+            if "antitrust" in title or "反垄断" in title:
+                return "反垄断"
+            if "privacy" in title or "数据安全" in title:
+                return "数据隐私"
+            return "政策法规"
 
-        # Clean up empty subcategories
-        return {k: v for k, v in subcategories.items() if v}
+        if parent_category == "全球重大事件":
+            if "war" in title or "军事" in title or "冲突" in title:
+                return "军事/冲突"
+            if "election" in title or "选举" in title:
+                return "选举/政治"
+            return "国际要闻"
+
+        return "最新动态"
 
     def get_cluster_summary(self, clusters: dict[str, list[dict]]) -> str:
         """Generate a summary of the clusters."""

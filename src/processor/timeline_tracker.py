@@ -55,14 +55,27 @@ class TimelineTracker:
             "version": "3.0.0"
         }
 
+    def _convert_sets_to_lists(self, obj):
+        """Recursively convert sets to lists for JSON serialization."""
+        if isinstance(obj, set):
+            return sorted(list(obj))  # Sort for consistent output
+        elif isinstance(obj, dict):
+            return {k: self._convert_sets_to_lists(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._convert_sets_to_lists(item) for item in obj]
+        return obj
+
     def _save_state(self):
         """Save state to file."""
         self.state["last_update"] = self._get_current_timestamp()
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
 
+        # Convert sets to lists for JSON serialization
+        state_to_save = self._convert_sets_to_lists(self.state)
+
         try:
             with open(self.state_file, "w", encoding="utf-8") as f:
-                json.dump(self.state, f, ensure_ascii=False, indent=2)
+                json.dump(state_to_save, f, ensure_ascii=False, indent=2)
             logger.debug("Saved timeline state")
         except Exception as e:
             logger.error(f"Failed to save timeline state: {e}")
@@ -188,7 +201,7 @@ class TimelineTracker:
             if entity not in timeline["entities_found"]:
                 entity_state["status"] = "dormant"
 
-        # Save state
+        # Save state (convert sets to lists first)
         self._save_state()
 
         # Convert sets to lists for JSON serialization

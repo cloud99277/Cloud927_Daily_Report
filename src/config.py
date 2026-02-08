@@ -69,6 +69,11 @@ class Config:
         return self._config.get("app", {})
 
     @property
+    def llm(self) -> dict:
+        """Get LLM configuration."""
+        return self._config.get("llm", {})
+
+    @property
     def sources(self) -> dict:
         """Get all data source configurations."""
         return self._config.get("sources", {})

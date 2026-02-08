@@ -1,62 +1,71 @@
-# Cloud927 v3.0 Configuration
-# Global configuration for data sources, processing, and output
+# Cloud927 v4.0 Configuration
+# Personal Decision Reference System
 
 # Application Settings
 app:
   name: "Cloud927"
-  version: "3.0.0"
+  version: "4.0.0"
   log_level: "INFO"
 
-# Data Source Groups for v3.0
+# LLM Configuration (dual-layer architecture)
+llm:
+  preprocessor:
+    provider: gemini
+    model: gemini-2.0-flash
+    api_key_env: GEMINI_API_KEY
+  insight:
+    provider: claude
+    model: claude-opus-4-5
+    api_key_env: ANTHROPIC_AUTH_TOKEN
+    base_url: "https://code.newcli.com/claude/droid"
+
+# Pipeline Configuration
+pipeline:
+  max_workers: 12
+  stages:
+    fetch: true
+    deduplicate: true
+    cluster: true
+    timeline: true
+    preprocess: true
+    generate: true
+    save: true
+
+# Six Sector Groups
 fetcher_groups:
-  ai_tech:
-    sources:
-      - hn
-      - github
-      - hf
-      - ai_news
-      - reddit
-      - ph
-      - v2ex
-      - hn_show
-      - twitter
-      - arxiv
+  ai_frontier:
+    sources: [hn, github, hf, ai_news, reddit, ph, v2ex, hn_show, twitter, arxiv]
     fetch_parallel: true
     max_workers: 10
 
-  global_news:
-    sources:
-      - reuters
-      - ap_news
-      - bbc_world
+  startup:
+    sources: [techcrunch, 36kr_startup, itjuzi]
     fetch_parallel: true
     max_workers: 3
-    interval_hours: 1
 
-  china_tech:
-    sources:
-      - jinri_remai
-      - sina
-      - ifeng
-      - "36kr"
-      - "机器之心"
+  finance:
+    sources: [ft, bloomberg, yahoo_finance]
     fetch_parallel: true
-    max_workers: 5
-    interval_hours: 2
+    max_workers: 3
 
-  china_society:
-    sources:
-      - pengpai
-      - xinjingbao
-      - caixin
-      - rmrb
+  crypto:
+    sources: [coindesk, theblock, decrypt]
     fetch_parallel: true
-    max_workers: 4
-    interval_hours: 2
+    max_workers: 3
+
+  policy:
+    sources: [techpolicy, china_policy]
+    fetch_parallel: true
+    max_workers: 2
+
+  global_events:
+    sources: [reuters, ap_news, bbc_world, pengpai, caixin, jinri_remai, sina, ifeng]
+    fetch_parallel: true
+    max_workers: 8
 
 # Individual Data Source Configurations
 sources:
-  # Existing v2.0 Sources
+  # === AI 前沿 ===
   hn:
     enabled: true
     type: "api"
@@ -322,6 +331,109 @@ sources:
       categories: ["cs.AI", "cs.LG", "cs.CL"]
       max_results: 50
 
+  # === 创业/投融资 ===
+  techcrunch:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "startup"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  36kr_startup:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "startup"
+    fetch_interval_minutes: 180
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  itjuzi:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "startup"
+    fetch_interval_minutes: 360
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  # === 金融/宏观 ===
+  ft:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "finance"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  bloomberg:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "finance"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  yahoo_finance:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "finance"
+    fetch_interval_minutes: 240
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  # === Web3/Crypto ===
+  coindesk:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "crypto"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  theblock:
+    enabled: true
+    type: "rss"
+    priority: "P0"
+    category: "crypto"
+    fetch_interval_minutes: 120
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  decrypt:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "crypto"
+    fetch_interval_minutes: 180
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  # === 科技政策 ===
+  techpolicy:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "policy"
+    fetch_interval_minutes: 240
+    timeout_seconds: 30
+    retry_attempts: 3
+
+  china_policy:
+    enabled: true
+    type: "rss"
+    priority: "P1"
+    category: "policy"
+    fetch_interval_minutes: 360
+    timeout_seconds: 30
+    retry_attempts: 3
+
 # Processing Configuration
 processing:
   deduplication:
@@ -338,13 +450,12 @@ processing:
     method: "keyword"  # or "embedding"
     max_cluster_size: 5
     categories:
-      - "AI模型更新"
-      - "开源工具/框架"
-      - "研究论文/突破"
-      - "产品发布/融资"
-      - "行业动态/政策"
-      - "全球要闻"
-      - "中国社会"
+      - "AI前沿"
+      - "创业/投融资"
+      - "金融/宏观"
+      - "Web3/Crypto"
+      - "科技政策"
+      - "全球重大事件"
 
   timeline:
     enabled: true
